@@ -1,6 +1,6 @@
 """
 GPU FIX & DIAGNOSTIC SCRIPT
-Run this BEFORE training to verify your RTX GPU is working.
+Run this BEFORE training to verify your NVIDIA GPU is working.
 
 What this does:
   1. Uninstalls CPU-only PyTorch completely
@@ -15,33 +15,40 @@ Usage:
 import subprocess
 import sys
 import os
-
+import platform
 
 def run(cmd, label="", capture=True):
     print(f"  ⏳ {label}..." if label else "", flush=True)
-    result = subprocess.run(cmd, capture_output=capture, text=True)
-    return result
-
+    try:
+        result = subprocess.run(cmd, capture_output=capture, text=True, shell=(platform.system() == "Windows"))
+        return result
+    except FileNotFoundError:
+        class DummyResult:
+            def __init__(self):
+                self.returncode = 127
+                self.stdout = ""
+                self.stderr = "Command not found"
+        return DummyResult()
 
 def pip(args, label=""):
     return run([sys.executable, "-m", "pip"] + args, label)
-
 
 def banner(text):
     print("\n" + "="*65)
     print(f"  {text}")
     print("="*65)
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 def step1_check_nvidia():
-    """Check if Windows can see your NVIDIA GPU at all."""
+    """Check if the OS can see your NVIDIA GPU at all."""
     banner("STEP 1: Checking NVIDIA GPU visibility")
+    os_name = platform.system()
 
     result = run(["nvidia-smi"], "Running nvidia-smi")
 
     if result.returncode != 0:
-        print("""
+        if os_name == "Windows":
+            print("""
   ❌ nvidia-smi failed. This means one of:
      a) NVIDIA driver is NOT installed
      b) Driver is too old
@@ -51,6 +58,17 @@ def step1_check_nvidia():
      → GeForce → RTX 30 Series → RTX 3050 or 3070 → Windows 11
      → Install → RESTART your PC → re-run this script
 """)
+        else:
+            print("""
+  ❌ nvidia-smi failed. This means one of:
+     a) NVIDIA driver is NOT installed
+     b) Driver is not properly configured
+
+  👉 Fix (Ubuntu/Debian):
+     sudo apt update
+     sudo ubuntu-drivers autoinstall
+     → RESTART your system → re-run this script
+""")
         return False
 
     # Print the important line from nvidia-smi
@@ -58,9 +76,8 @@ def step1_check_nvidia():
         if 'RTX' in line or 'Driver' in line or 'CUDA' in line or 'MiB' in line:
             print(f"  {line.strip()}")
 
-    print("\n  ✅ NVIDIA GPU found and driver is working!")
+    print(f"\n  ✅ NVIDIA GPU found and driver is working on {os_name}!")
     return True
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 def step2_check_current_torch():
@@ -91,9 +108,8 @@ def step2_check_current_torch():
         return version, True
 
     print("\n  ⚠️  PyTorch has CUDA build but CUDA is still not available.")
-    print("  This usually means CUDA Toolkit is not installed.")
+    print("  This usually means CUDA Toolkit or drivers are not properly set up.")
     return version, False
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 def step3_reinstall_torch():
@@ -105,10 +121,10 @@ def step3_reinstall_torch():
     # Uninstall existing torch completely
     pip(["uninstall", "torch", "torchvision", "torchaudio", "-y"], "Uninstalling old PyTorch")
 
-    # Install CUDA 12.1 build (compatible with RTX 30xx)
+    # Install CUDA 12.1 build
     result = pip([
         "install",
-        "torch", "torchvision",
+        "torch", "torchvision", "torchaudio",
         "--index-url", "https://download.pytorch.org/whl/cu121",
         "--force-reinstall",
         "--no-cache-dir"
@@ -116,12 +132,11 @@ def step3_reinstall_torch():
 
     if result.returncode != 0:
         print(f"\n  ❌ Install failed!")
-        print(f"  Error: {result.stderr[-500:]}")
+        print(f"  Error: {result.stderr[-500:] if result.stderr else 'Unknown error'}")
         return False
 
     print("\n  ✅ PyTorch CUDA installed successfully!")
     return True
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 def step4_full_gpu_test():
@@ -143,10 +158,13 @@ print(f"  CUDA version    : {torch.version.cuda}")
 if not torch.cuda.is_available():
     print()
     print("  ❌ CUDA still not available after reinstall.")
-    print("  👉 You need to install CUDA Toolkit 12.1:")
-    print("     https://developer.nvidia.com/cuda-12-1-0-download-archive")
-    print("     Windows → x86_64 → 11 → exe (local)")
-    print("     Install → RESTART PC → re-run this script")
+    print("  👉 Manual check required:")
+    if sys.platform == 'win32':
+        print("     1. Install CUDA Toolkit 12.1: https://developer.nvidia.com/cuda-12-1-0-download-archive")
+        print("     2. Restart PC and re-run this script.")
+    else:
+        print("     1. Install CUDA Toolkit: sudo apt install nvidia-cuda-toolkit")
+        print("     2. Ensure drivers match toolkit version.")
     sys.exit(1)
 
 # GPU details
@@ -185,17 +203,17 @@ print("  ✅ ALL TESTS PASSED — GPU IS READY FOR TRAINING!")
 print("=" * 55)
 print()
 print("  👉 Now run:")
-print("     python 2_train_model.py --data .\\\\face_emotion\\\\data\\\\affectnet-yolo-format")
+print("     python 2_train_model.py --data ./" + ("face_emotion/data/affectnet-yolo-format" if sys.platform != "win32" else "face_emotion\\\\data\\\\affectnet-yolo-format"))
 """
 
     result = run([sys.executable, "-c", test_script], capture=False)
     return result.returncode == 0
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 def step5_check_cuda_toolkit():
     """Check if CUDA Toolkit is installed."""
     banner("STEP 5: Checking CUDA Toolkit installation")
+    os_name = platform.system()
 
     # Check nvcc (CUDA compiler)
     result = run(["nvcc", "--version"], "Checking nvcc")
@@ -208,17 +226,20 @@ def step5_check_cuda_toolkit():
     else:
         print("  ⚠️  CUDA Toolkit (nvcc) not found in PATH.")
         print("  This may or may not be a problem — PyTorch bundles its own CUDA libs.")
-        print("  If Step 4 passed, you're fine. If not, install CUDA Toolkit 12.1:")
-        print("  → https://developer.nvidia.com/cuda-12-1-0-download-archive")
+        print("  If Step 4 passed, you're fine. If not, follow these steps:")
+        if os_name == "Windows":
+            print("  → https://developer.nvidia.com/cuda-12-1-0-download-archive")
+        else:
+            print("  → sudo apt install nvidia-cuda-toolkit")
         return False
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
-    print("""
+    os_name = platform.system()
+    print(f"""
 ╔═══════════════════════════════════════════════════════════════╗
 ║                                                               ║
-║   🔧 GPU FIX & DIAGNOSTIC — RTX 3050 / 3070 Edition          ║
+║   🔧 GPU FIX & DIAGNOSTIC — {os_name.upper()} EDITION               ║
 ║                                                               ║
 ║   This script will:                                           ║
 ║   1. Check your NVIDIA driver                                 ║
@@ -233,7 +254,7 @@ def main():
     # Step 1: Check nvidia-smi
     driver_ok = step1_check_nvidia()
     if not driver_ok:
-        print("\n❌ Cannot proceed without NVIDIA driver. Install driver first, then re-run.")
+        print(f"\n❌ Cannot proceed without NVIDIA driver. Install driver first, then re-run.")
         sys.exit(1)
 
     # Step 2: Check current PyTorch
@@ -255,21 +276,20 @@ def main():
     # Final verdict
     banner("FINAL RESULT")
     if gpu_ok:
-        print("""
+        data_path = ".\\face_emotion\\data\\affectnet-yolo-format" if os_name == "Windows" else "./face_emotion/data/affectnet-yolo-format"
+        print(f"""
   🎉 YOUR GPU IS READY!
 
   Run training now:
-     python 2_train_model.py --data .\\face_emotion\\data\\affectnet-yolo-format
+     python 2_train_model.py --data {data_path}
 
-  Expected training time with RTX GPU: ~30-45 minutes for 50 epochs
+  Expected training time with NVIDIA GPU: ~30-45 minutes for 50 epochs
   (vs ~3 hours on CPU)
 """)
     else:
-        print("""
-  ❌ GPU NOT READY YET
-
-  Most likely cause: CUDA Toolkit not installed.
-
+        print("\n  ❌ GPU NOT READY YET")
+        if os_name == "Windows":
+            print("""
   Fix steps:
   1. Go to: https://developer.nvidia.com/cuda-12-1-0-download-archive
   2. Select: Windows → x86_64 → 11 → exe (local)
@@ -277,7 +297,13 @@ def main():
   4. RESTART your PC
   5. Re-run: python 0_fix_gpu.py
 """)
-
+        else:
+            print("""
+  Fix steps:
+  1. Run: sudo apt install nvidia-cuda-toolkit
+  2. RESTART your system
+  3. Re-run: python 0_fix_gpu.py
+""")
 
 if __name__ == "__main__":
     main()

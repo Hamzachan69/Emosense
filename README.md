@@ -1,33 +1,53 @@
-# EmoSense - Face Emotion Recognition
+# EmoSense - AI Face Emotion Recognition
 
-EmoSense is a real-time emotion detection system. You point your webcam at a person and it automatically finds their face, draws a box around it, and tells you what emotion they are showing. It can detect seven emotions: angry, disgust, fear, happy, neutral, sad, and surprise.
+EmoSense is a high-performance, real-time emotion detection system. It uses an AI pipeline to find faces in a webcam feed and classify their emotions into seven categories: **Angry, Disgust, Fear, Happy, Neutral, Sad, and Surprise**.
 
-The system works in two steps every single frame. First, a face-detection model finds where the face is in the image. Second, an emotion-classification model looks at just the face area and decides which emotion it sees. Both steps happen fast enough to run live on a webcam.
+The project is built on the **YOLOv8** architecture and is optimized for NVIDIA RTX GPUs, though it can run on any system with a CPU as a fallback.
 
----
+## How it Works
 
-## What You Need Before Starting
-
-- Python 3.10 or newer
-- An NVIDIA GPU (the system is built for an RTX 3070, but any CUDA-capable GPU works)
-- The RAF-DB dataset placed in `face_emotion/data/RAF DB/DATASET/`
-- The `yolov8n-face.pt` face detector file in the project root folder
-
-If you do not have a GPU, the system will fall back to running on CPU, but training will be much slower (hours instead of minutes).
+EmoSense uses a **Two-Stage Pipeline**:
+1.  **Stage 1 (Face Detection)**: A YOLOv8-face model scans the image to find all human faces.
+2.  **Stage 2 (Emotion Classification)**: Each face is cropped and passed to a custom-trained YOLOv8-cls model that predicts the emotion.
 
 ---
 
-## How to Use It
+## Installation & Setup
 
-There are three steps. You only need to do steps 1 and 2 once. After that, you just run step 3 every time you want to use the app.
+### Operating System Support
+- **Windows**: Fully supported (Windows 10/11 recommended).
+- **Linux**: Supported for **Ubuntu/Debian-based** systems (Ubuntu, Kali, Mint, etc.).
+- **Other Linux Distros**: Supported, but requires manual installation of system dependencies (see [Warning](#linux-warning) below).
 
-**Step 1 — Install dependencies**
+### Step 1 — Install Dependencies
 
-```
+Open your terminal or command prompt in the project folder and run:
+
+```bash
 python 1_install_requirements.py
 ```
 
-This installs all the required Python packages including the correct GPU-enabled version of PyTorch.
+**What this script does:**
+- **On Windows**: It installs the correct GPU-accelerated PyTorch and all UI/AI libraries.
+- **On Linux (Ubuntu/Debian)**: It uses `sudo apt` to install required system libraries (`libGL`, `libglib`, etc.) and then installs the Python packages.
+- **On other Linux distros**: It will warn you and list the libraries you need to install manually.
+
+<a name="linux-warning"></a>
+> [!WARNING]
+> **For Non-Debian/Ubuntu Linux Users:**
+> The installer cannot automatically install system libraries for your distro (e.g., Arch, Fedora). You MUST manually install:
+> `libGL`, `libglib2.0`, `libSM`, `libXext`, and `libXrender`.
+> Without these, the `cv2` (OpenCV) library will fail to import.
+
+### Step 2 — Fix & Verify GPU
+
+To ensure your NVIDIA GPU is being used (essential for fast training), run:
+
+```bash
+python 0_fix_gpu.py
+```
+
+This script will detect your OS, check for NVIDIA drivers, and ensure PyTorch is correctly configured for CUDA. If anything is wrong, it will give you a direct link or command to fix it.
 
 **Step 2 — Train the emotion model**
 

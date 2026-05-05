@@ -14,18 +14,56 @@ The system works in two stages. Stage 1 finds faces in an image. Stage 2 looks a
 
 ---
 
-## 1. Environment Setup
+## 1. Libraries and Dependencies
 
-Before any training or running can happen, the correct version of PyTorch must be installed. The project uses NVIDIA GPUs (specifically the RTX 3070) to speed up training. This requires the CUDA-enabled version of PyTorch (`cu121`), not the standard CPU-only version.
+EmoSense relies on several powerful libraries to handle AI, Computer Vision, and UI. Below is a detailed breakdown of why they were chosen and where they are used:
 
-The required packages are:
+### AI & Computer Vision
+- **`ultralytics` (YOLOv8)**:
+  - **Where**: Used in `2_train_model.py` for training and `3_run_app.py` for inference.
+  - **Why**: Provides the state-of-the-art YOLOv8 architecture. It's incredibly fast, accurate, and easy to use for both object detection (finding faces) and classification (recognizing emotions).
+- **`torch` (PyTorch)**:
+  - **Where**: The underlying engine for `ultralytics`. Used in `0_fix_gpu.py` to verify hardware acceleration.
+  - **Why**: The industry standard for deep learning. It allows the model to run on NVIDIA GPUs using CUDA, making training 10x faster than on a CPU.
+- **`opencv-python` (cv2)**:
+  - **Where**: Used in `3_run_app.py` and `2_train_model.py`.
+  - **Why**: The "eyes" of the project. It handles webcam access, image reading/writing, resizing frames, and drawing the colorful bounding boxes and labels on the screen.
+- **`onnxruntime-gpu`**:
+  - **Where**: Used in `3_run_app.py`.
+  - **Why**: Once a model is trained, we export it to ONNX format. ONNX Runtime is often faster than PyTorch for running the model (inference) and has fewer dependencies.
 
-- `ultralytics` — the library that provides the YOLOv8 models and training engine
-- `customtkinter` — the library used to build the modern dark-themed GUI window
-- `opencv-python` — used to capture webcam frames and draw boxes/labels on images
-- `onnxruntime-gpu` — used to run ONNX models fast using the GPU's tensor cores
-- `pillow` — used for image conversion and drawing emoji characters
-- `matplotlib`, `tqdm`, `numpy` — utilities for charts, progress bars, and array operations
+### User Interface (GUI)
+- **`customtkinter`**:
+  - **Where**: Used in `3_run_app.py`.
+  - **Why**: Python's default UI (Tkinter) looks very dated. CustomTkinter provides a modern, "Apple-style" dark theme with rounded corners and smooth animations, making the app feel premium.
+- **`pillow` (PIL)**:
+  - **Where**: Used in `3_run_app.py`.
+  - **Why**: Used to handle emoji rendering and complex image transformations that OpenCV doesn't support well, like placing transparent overlays.
+
+### Utilities
+- **`numpy`**:
+  - **Where**: Everywhere (mostly hidden inside other libs).
+  - **Why**: Handles the heavy math. Images are treated as massive grids of numbers (arrays), and NumPy is the fastest way to process them.
+- **`matplotlib`**:
+  - **Where**: Used in `2_train_model.py`.
+  - **Why**: Generates the training charts (loss and accuracy) so you can see how the model improved over time.
+- **`tqdm`**:
+  - **Where**: Used in the installation and training scripts.
+  - **Why**: Provides the "smart" progress bars in the terminal so you know exactly how long a task will take.
+
+---
+
+## 2. Environment Setup (Windows & Linux)
+
+Before any training or running can happen, the correct environment must be set up. The project is designed to be cross-platform, supporting both **Windows 10/11** and **Linux (Ubuntu/Debian)**.
+
+### GPU Support
+The project uses NVIDIA GPUs to speed up training. This requires:
+1.  **NVIDIA Drivers**: Installed on the host OS.
+2.  **CUDA Toolkit**: The software that lets Python talk to the GPU.
+3.  **PyTorch CUDA**: A specific version of PyTorch built for your CUDA version.
+
+The script `0_fix_gpu.py` is provided to automate the detection and installation of these components.
 
 ---
 
