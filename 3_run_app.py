@@ -23,6 +23,7 @@ try:
     import customtkinter as ctk
     from PIL import Image, ImageTk, ImageDraw, ImageFont
     from ultralytics import YOLO
+    import tkinter as tk  # Needed for animations and canvas
 except ImportError as e:
     print(f"\nMissing package: {e.name}")
     print("   Run: pip install ultralytics customtkinter pillow opencv-python\n")
@@ -225,11 +226,10 @@ class EmotionDetectorApp:
         self.cap             = None    # OpenCV video capture object
         self.emotion_counts  = {e: 0 for e in EMOTIONS}  # running tally of each emotion seen
         self.current_emotion = None    # the dominant emotion in the current frame
-
-        # Build the window, lay out the UI, then load the models.
+ 
+        # Build the window, then show the intro page.
         self._build_window()
-        self._build_ui()
-        self._load_models()
+        self._show_intro()
 
     # -- WINDOW --
     def _build_window(self):
@@ -247,6 +247,162 @@ class EmotionDetectorApp:
         ww = self.root.winfo_width()
         wh = self.root.winfo_height()
         self.root.geometry(f"{ww}x{wh}+{(sw - ww) // 2}+{(sh - wh) // 2}")
+
+    # -- INTRO PAGE --
+    def _show_intro(self):
+        # Create a full-screen overlay for the intro.
+        self.intro_frame = ctk.CTkFrame(self.root, fg_color="#0d1117", corner_radius=0)
+        self.intro_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+        
+        # Wait a moment for window layout, then start animation
+        self.root.after(200, self._animate_intro)
+
+    def _animate_intro(self):
+        # Create a canvas for smooth animations
+        self.cv = tk.Canvas(self.intro_frame, bg="#0d1117", highlightthickness=0, bd=0)
+        self.cv.pack(fill="both", expand=True)
+        
+        W = self.root.winfo_width()
+        H = self.root.winfo_height()
+        if W < 100: W, H = 1300, 640 # Fallback
+        
+        # Items: Title (below screen), Subtitle (invisible color), Buttons (hidden)
+        self.t1 = self.cv.create_text(W/2, H + 100, text="EMOSENSE", 
+                                      font=("Georgia", 54, "bold"), fill="#00D4AA")
+        self.t2 = self.cv.create_text(W/2, H/2 + 40, text="by HamzaChan", 
+                                      font=("Georgia", 20, "italic"), fill="#0d1117")
+
+        # 1. Slide Title Up (Fast then Slow)
+        def slide_up(y):
+            target_y = H/2 - 30
+            dist = y - target_y
+            if dist > 1:
+                # Ease-out: move by a fraction of distance (starts fast, ends slow)
+                step = max(dist * 0.12, 1)
+                new_y = y - step
+                self.cv.coords(self.t1, W/2, new_y)
+                self.root.after(10, lambda: slide_up(new_y))
+            else:
+                self.cv.coords(self.t1, W/2, target_y)
+                fade_in_name(0)
+
+        # 2. Fade In Subtitle
+        def fade_in_name(alpha):
+            if alpha <= 255:
+                # Interpolate from #0d1117 (13,17,23) to #7788AA (119,136,170)
+                r = int(13 + (119 - 13) * (alpha/255))
+                g = int(17 + (136 - 17) * (alpha/255))
+                b = int(23 + (170 - 23) * (alpha/255))
+                self.cv.itemconfig(self.t2, fill=f"#{r:02x}{g:02x}{b:02x}")
+                self.root.after(15, lambda: fade_in_name(alpha + 15))
+            else:
+                show_buttons()
+
+        # 3. Show Buttons with Slide Up Animation (Ease-Out)
+        def show_buttons():
+            self.btn_container = ctk.CTkFrame(self.intro_frame, fg_color="transparent")
+            
+            def slide_btns(rely):
+                target_rely = 0.75
+                dist = rely - target_rely
+                if dist > 0.005:
+                    step = dist * 0.1
+                    new_rely = rely - step
+                    self.btn_container.place(relx=0.5, rely=new_rely, anchor="center")
+                    self.root.after(10, lambda: slide_btns(new_rely))
+                else:
+                    self.btn_container.place(relx=0.5, rely=target_rely, anchor="center")
+
+            ctk.CTkButton(self.btn_container, text="GET STARTED", 
+                          command=self._start_app,
+                          width=200, height=50, corner_radius=25,
+                          font=("Segoe UI", 14, "bold"),
+                          fg_color="#00D4AA", hover_color="#00FFCC",
+                          text_color="#0d1117").pack(side="left", padx=20)
+            
+            ctk.CTkButton(self.btn_container, text="ABOUT APP", 
+                          command=lambda: self._fade_to_page(self._show_about),
+                          width=200, height=50, corner_radius=25,
+                          font=("Segoe UI", 14, "bold"),
+                          fg_color="#1E2D3D", hover_color="#2D3F50",
+                          text_color="#AABBCC").pack(side="left", padx=20)
+            
+            slide_btns(1.2)
+
+        slide_up(H + 100)
+
+    def _show_about(self):
+        # Narrative description for the about page
+        desc_text = (
+            "EmoSense represents a breakthrough in real-time affective computing, designed to bridge the gap between "
+            "machine logic and human feeling. At its core, the application utilizes a sophisticated two-stage AI pipeline. "
+            "First, a lightning-fast YOLOv8-face detector locates human presence with pinpoint precision. This is followed "
+            "by a robust YOLOv8s-cls classification engine, which analyzes the subtle nuances of facial expressions.\n\n"
+            "Meticulously trained on the RAF-DB (Real-world Affective Faces Database)—a massive repository of over "
+            "30,000 real-world images—EmoSense delivers exceptional accuracy across seven primary emotions. Whether "
+            "you are tracking live micro-expressions through a webcam or analyzing static portraits, EmoSense provides "
+            "a seamless and deeply insightful experience."
+        )
+
+        def build_about():
+            # Clear the intro content
+            for widget in self.intro_frame.winfo_children():
+                widget.destroy()
+            
+            # Centralized About Content
+            about_box = ctk.CTkFrame(self.intro_frame, fg_color="#161b22", corner_radius=20, border_width=1, border_color="#30363d")
+            about_box.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.7, relheight=0.7)
+            
+            ctk.CTkLabel(about_box, text="THE EMOSENSE STORY", font=("Georgia", 32, "bold"), text_color="#00D4AA").pack(pady=(40, 20))
+            
+            desc_lbl = ctk.CTkLabel(about_box, text=desc_text, font=("Segoe UI", 17), 
+                                    text_color="#AABBCC", justify="center", wraplength=750)
+            desc_lbl.pack(pady=20, padx=40)
+            
+            ctk.CTkButton(about_box, text="BACK TO MENU", 
+                          command=lambda: self._fade_to_page(self._show_intro),
+                          width=200, height=45, corner_radius=22,
+                          font=("Segoe UI", 13, "bold"),
+                          fg_color="#1E2D3D", hover_color="#2D3F50").pack(pady=30)
+
+        self._fade_to_page(build_about)
+
+    def _fade_to_page(self, target_func):
+        # Create a curtain for the fade transition
+        # Use CTkFrame instead of tk.Canvas to avoid the 'raise' method conflict
+        curtain = ctk.CTkFrame(self.root, fg_color="#0d1117", corner_radius=0)
+        curtain.place(relx=0, rely=0, relwidth=1, relheight=1)
+        curtain.lift()
+        
+        # Color steps for a smooth fade-to-black effect
+        steps = ["#0d1117", "#0a0c0f", "#07080a", "#040405", "#000000"]
+        
+        def fade_out(i=0):
+            if i < len(steps):
+                curtain.configure(fg_color=steps[i])
+                self.root.after(30, lambda: fade_out(i + 1))
+            else:
+                target_func()
+                self.root.after(150, lambda: fade_in(len(steps) - 1))
+
+        def fade_in(i):
+            if i >= 0:
+                curtain.configure(fg_color=steps[i])
+                self.root.after(30, lambda: fade_in(i - 1))
+            else:
+                curtain.destroy()
+
+        fade_out()
+
+    def _start_app(self):
+        def launch():
+            # Remove the intro and build the actual application UI.
+            if hasattr(self, 'intro_frame'):
+                self.intro_frame.destroy()
+            self._build_ui()
+            self._load_models()
+        
+        self._fade_to_page(launch)
 
     # -- FULL UI --
     def _build_ui(self):
